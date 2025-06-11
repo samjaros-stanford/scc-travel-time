@@ -6,7 +6,6 @@
 library(here)
 library(tidyverse)
 
-
 # GTFS Feeds ###################################################################
 library(gtfstools)
 
@@ -21,8 +20,8 @@ agencies <- tribble(
   53,         "BART",       "https://files.mobilitydatabase.org/mdb-53/mdb-53-202501130015/mdb-53-202501130015.zip",
   # CalTrain - Jan 27 2025 - Jul 30 2025
   54,         "Caltrain",   "https://files.mobilitydatabase.org/mdb-54/mdb-54-202501230102/mdb-54-202501230102.zip",
-  # VTA - DOES NOT HAVE A WORKING GTFS FEED FOR THESE DATES RIGHT NOW
-  57,         "VTA", "",
+  # VTA - Jan 13 2025 - Aug 10 2025  ##### NEED UPDATED VERSION WHEN ERRORS GO AWAY #####
+  57,         "VTA",        "https://files.mobilitydatabase.org/mdb-57/mdb-57-202504240107/mdb-57-202504240107.zip",
   # Marguerite - Aug 1 2024 to Oct 30 2025 
   59,         "Stanford Marguerite", "https://files.mobilitydatabase.org/mdb-59/mdb-59-202503130041/mdb-59-202503130041.zip",
   # MVGo - Feb 1 2025 - 
@@ -50,7 +49,7 @@ for(i in 1:nrow(gtfs_sources)){
 
 # Validate GTFS format ---------------------------------------------------------
 ## Get validator & directories for validation results
-gtfs_validator <- here("gtfs_validation/gtfs-validator-7.0.0-cli.jar")
+gtfs_validator <- download_validator(here("gtfs_validation/"))
 validation_out_dirs <- paste0("gtfs_validation/", gtfs_sources$agency_id, "_validation")
 
 ## Iterate through GTFSs and check validity
@@ -62,7 +61,7 @@ for(i in 1:nrow(gtfs_sources)){
                     output_path = validation_out_dirs[i], 
                     validator_path = gtfs_validator, 
                     pretty_json = T, 
-                    html_preview = F)
+                    html_preview = T)
       validation_results <- bind_rows(
         validation_results,
         jsonlite::fromJSON(paste0(validation_out_dirs[i], 
@@ -84,17 +83,6 @@ for(i in 1:nrow(gtfs_sources)){
 ## NOTE: Check to make sure the files at least have a GTFS format. You may need to
 ##   download gtfs.zip manually from a backup source
 
-# Combine GTFS feeds
-## r5 doesn't like >3 GTFS feeds, so combine
-## Use agency_id as prefix in format 
-gtfs_feeds <- lapply(gtfs_sources$gtfs_file, read_gtfs)
-mega_gtfs <- merge_gtfs(gtfs_feeds, 
-                        prefix = paste0("a", gtfs_sources$agency_id))
-write_gtfs(mega_gtfs, here("geo_data/mega_gtfs.zip"))
-
-# Clear memory
-rm(gtfs_feeds, mega_gtfs)
-
 # Street Network ###############################################################
 library(osmextract)
 
@@ -114,5 +102,5 @@ library(geojsonsf)
 library(raster)
 
 scc_area <- geojson_sf(read_file(here("raw_data/scc_area.geojson")))
-scc_elev_raster <- get_elev_raster(scc_area, z=13)
-writeRaster(scc_elev_raster, here("geo_data/scc_elev.tiff"))
+scc_elev_raster <- get_elev_raster(scc_area, z=12)
+writeRaster(scc_elev_raster, here("geo_data/scc_elev.tif"), overwrite=T)
