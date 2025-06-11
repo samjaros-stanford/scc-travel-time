@@ -1,0 +1,119 @@
+---
+title: "Travel Time Census Tract Analysis"
+output: html_document
+---
+
+```{r setup}
+library(here)
+library(sf)
+library(tidycensus)
+library(tidyverse)
+library(yaml)
+
+# Import =======================================================================
+# Get API keys
+keys <- read_yaml(here("secrets.yaml"))
+# Datasets
+tt_tract <- readRDS(here("data/tract_tts_v2.rds")) %>%
+  st_drop_geometry() %>%
+  mutate(tt_diff = tt_option_3 - tt_option_1) %>%
+  # Log can't handle 0 travel times
+  mutate(tt_option_1 = if_else(tt_option_1==0, 1, tt_option_1),
+         tt_diff = if_else(tt_diff==0, 1, tt_diff))
+# HPI v3.0
+hpi <- read_csv(paste0("https://api.healthyplacesindex.org/api/hpi?geography=tracts&year=2022&indicator=hpiscore&format=csv&key=", keys$HPI)) %>%
+  filter(startsWith(geoid, "06085"))
+# 2022 SVI
+svi <- read_csv(here("data/California.csv")) %>%
+  filter(startsWith(FIPS, "06085"))
+# # 2023 ICE
+# ice <- read_csv(here("data/ice_acs_2023_tract.csv")) %>%
+#   filter(startsWith(GEOID, "06085"))
+# # 2023 ACS5
+# # Median income, No vehicle
+# acs <- get_acs("tract", table="S1901", year=2023, state="06", cache_table=T) %>%
+#   filter(startsWith(GEOID, "06085") & variable=="S1901_C01_012")
+
+# Merge ========================================================================
+analysis_data <- tt_tract %>%
+  left_join(hpi %>% select(geoid, hpi=value), by=join_by(id==geoid)) %>%
+  left_join(svi %>% select(FIPS, svi=RPL_THEMES), by=join_by(id==FIPS))
+  # %>%
+  # left_join(ice %>% select(GEOID, ICEincwnh), by=join_by(id==GEOID)) %>%
+  # left_join(acs %>% select(GEOID, median_income=estimate), by=join_by(id==GEOID))
+
+# Modeling function ============================================================
+run_mod <- function(outcome, index, sub) {
+  mod <- glm(formula = as.formula(paste0(outcome, "~", index)),
+             data = analysis_data,
+             subset = analysis_data$method==sub,
+             family = gaussian(link = "log"))
+  
+  coeff <- summary(mod)$coefficients
+  
+  cis <- confint(mod)
+  
+  return(
+    data.frame("outcome"   = outcome,
+               "index"     = index,
+               "sub"       = sub,
+               "coef_name" = rownames(coeff)[-1],
+               "coef"      = exp(coeff[-1,1]),
+               "p"         = coeff[-1,4],
+               "ci_l"      = exp(cis[-1,1]),
+               "ci_u"      = exp(cis[-1,2]))
+  )
+}
+```
+
+# Indices
+
+```{r hpi}
+mod_specs <- expand.grid(outcome = c("tt_option_1", "tt_diff"),
+                         index = c("hpi", "svi"),
+                         sub = c("TRANSIT", "CAR", "BICYCLE", "WALK"))
+
+mod_results <- mapply(run_mod, 
+                      outcome = mod_specs$outcome, 
+                      index = mod_specs$index, 
+                      sub = mod_specs$sub,
+                      SIMPLIFY = F) %>%
+  bind_rows() %>%
+  mutate(p = round(p, digits=4))
+```
+
+# Significant Difference by Mode
+
+```{r}
+# Transit vs Car
+transit_data <- analysis_data %>%
+  filter(method %in% c("TRANSIT", "CAR")) %>%
+  mutate(method = factor(method, levels = c("CAR", "TRANSIT")))
+
+transit_mod <- glm(tt_option_1 ~ method, data = transit_data,
+                   family = gaussian(link = "log"))
+
+summary(transit_mod)
+
+# Bike vs Car
+bike_data <- analysis_data %>%
+  filter(method %in% c("BICYCLE", "CAR")) %>%
+  mutate(method = factor(method, levels = c("CAR", "BICYCLE")))
+
+bike_mod <- glm(tt_option_1 ~ method, data = bike_data,
+                family = gaussian(link = "log"))
+
+summary(bike_mod)
+
+# Walk vs Car
+walk_data <- analysis_data %>%
+  filter(method %in% c("WALK", "CAR")) %>%
+  mutate(method = factor(method, levels = c("CAR", "WALK")))
+
+walk_mod <- glm(tt_option_1 ~ method, data = walk_data,
+                family = gaussian(link = "log"))
+
+summary(walk_mod)
+```
+
+

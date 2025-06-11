@@ -1,0 +1,53 @@
+---
+title: "22_population_analysis"
+output: html_document
+---
+
+```{r setup}
+library(here)
+library(sf)
+library(tidyverse)
+
+# Import =======================================================================
+tt_tract <- readRDS(here("data/tract_tts_v3.rds")) %>%
+  st_drop_geometry()
+```
+
+# Percent of the population within given distances
+
+```{r}
+# Get population within travel distance
+tt_tract %>%
+  # Replace NA with infinite time
+  mutate(tt_option_1 = if_else(is.na(tt_option_1),
+                               Inf,
+                               tt_option_1)) %>%
+  # Make travel time categorical
+  mutate(tt_cat = cut(tt_option_1,
+                      breaks = c(-Inf, 15, 30, 60, Inf),
+                      labels = c("<=15 min", "15-30 min", "30-60 min", ">60 min"))) %>%
+  group_by(method, tt_cat) %>%
+  summarize(total_pop = sum(pop)) %>%
+  group_by(method) %>%
+  mutate(percent_pop = total_pop/sum(total_pop)*100)
+```
+
+# Percent of the population affected by travel time disparities
+
+```{r}
+# Get population affected by different travel disparities
+tt_tract %>%
+  # Replace NA with infinite time
+  mutate(tt_diff = if_else(is.na(tt_option_3 - tt_option_1),
+                           Inf,
+                           tt_option_3 - tt_option_1)) %>%
+  # Make travel time categorical
+  mutate(tt_cat = cut(tt_diff,
+                      breaks = c(-Inf, 15, 30, 60, Inf),
+                      labels = c("<=15 min", "15-30 min", "30-60 min", ">60 min"))) %>%
+  group_by(method, tt_cat) %>%
+  summarize(total_pop = sum(pop)) %>%
+  group_by(method) %>%
+  mutate(percent_pop = total_pop/sum(total_pop)*100)
+```
+

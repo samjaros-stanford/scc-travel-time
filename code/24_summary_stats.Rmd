@@ -1,0 +1,108 @@
+---
+title: "24_summary_stats"
+output: html_document
+---
+
+```{r setup}
+library(here)
+library(geojsonsf)
+library(sf)
+library(tidyverse)
+
+# Import =======================================================================
+tt_tract <- readRDS(here("data/tract_tts_v2.rds")) %>%
+  mutate(tt_diff = tt_option_3 - tt_option_1)
+```
+
+# Census Summary
+
+```{r}
+length(unique(tt_tract$id))
+
+sum(tt_tract %>% 
+      filter(method=="CAR") %>% 
+      pull(pop), 
+    na.rm=T)
+```
+
+# Travel Time Summary
+
+```{r}
+# Walking
+tt_tract %>%
+  filter(method=="WALK") %>%
+  pull(tt_option_1) %>%
+  median(na.rm=T)
+
+tt_tract %>%
+  filter(method=="WALK") %>%
+  pull(tt_option_1) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+
+# Transit
+tt_tract %>%
+  filter(method=="TRANSIT") %>%
+  pull(tt_option_1) %>%
+  median(na.rm=T)
+
+tt_tract %>%
+  filter(method=="TRANSIT") %>%
+  pull(tt_option_1) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+
+# Bicycle
+tt_tract %>%
+  filter(method=="BICYCLE") %>%
+  pull(tt_option_1) %>%
+  median(na.rm=T)
+
+tt_tract %>%
+  filter(method=="BICYCLE") %>%
+  pull(tt_option_1) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+
+# Car
+tt_tract %>%
+  filter(method=="CAR") %>%
+  pull(tt_option_1) %>%
+  median(na.rm=T)
+
+tt_tract %>%
+  filter(method=="CAR") %>%
+  pull(tt_option_1) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+```
+
+# Area-specific stats
+
+```{r}
+dt_sj_url <- "https://geo.sanjoseca.gov/server/rest/services/OPN/OPN_OpenDataService/MapServer/120/query?outFields=*&where=1%3D1&f=geojson"
+
+dt_sj_shape <- geojson_sf(dt_sj_url) %>%
+  filter(DISTRICT==3)
+
+dt_sj_tt_tract <- tt_tract %>%
+  st_as_sf(coords = c(lat, lon), crs=4326) %>%
+  st_filter(dt_sj_shape)
+
+dt_sj_tt_tract %>%
+  filter(method=="WALK") %>%
+  pull(tt_option_1) %>%
+  median(na.rm=T)
+
+dt_sj_tt_tract %>%
+  filter(method=="WALK") %>%
+  pull(tt_option_1) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+
+dt_sj_tt_tract %>%
+  filter(method=="TRANSIT") %>%
+  pull(tt_diff) %>%
+  median(na.rm=T)
+
+dt_sj_tt_tract %>%
+  filter(method=="TRANSIT") %>%
+  pull(tt_diff) %>%
+  quantile(probs = c(0.25, 0.75), na.rm=T)
+```
+
